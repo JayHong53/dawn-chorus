@@ -8,9 +8,9 @@
 	<style>
 		:root { color-scheme: dark; }
 		* { box-sizing: border-box; }
-		html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #080b0e; }
-		body { font-family: Georgia, serif; }
-		canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+		html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; background: #080b0e; }
+		body { position: fixed; inset: 0; height: 100dvh; font-family: Georgia, serif; }
+		canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; }
 		body.sleeping, body.sleeping canvas { cursor: none; }
 		.controls {
 			position: fixed; bottom: max(25px, env(safe-area-inset-bottom)); left: 50%;
@@ -24,7 +24,7 @@
 		button {
 			position: relative; display: grid; place-items: center; width: 44px; height: 44px;
 			padding: 0; border: 1px solid transparent; border-radius: 50%;
-			background: transparent; color: #b6c1c6; cursor: pointer;
+			background: transparent; color: #b6c1c6; cursor: pointer; touch-action: manipulation;
 			-webkit-tap-highlight-color: transparent;
 		}
 		button:hover { background: #b5c8ce0a; color: #e0e6e7; }
@@ -49,7 +49,7 @@
 		}
 		.panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; }
 		output { font-variant-numeric: tabular-nums; white-space: nowrap; color: #98b1b7; }
-		input[type="range"] { display: block; width: 100%; height: 32px; margin: 12px 0 0; accent-color: #a4c1c6; cursor: pointer; }
+		input[type="range"] { display: block; width: 100%; height: 32px; margin: 12px 0 0; accent-color: #a4c1c6; cursor: pointer; touch-action: none; }
 		input:focus-visible { outline: 1px solid #9baeb7; outline-offset: 3px; }
 		.auto-mode { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; cursor: pointer; }
 		.auto-mode input { width: 16px; height: 16px; margin: 0; accent-color: #a4c1c6; }
@@ -64,6 +64,10 @@
 		@keyframes unfold { from { opacity: 0; translate: 0 5px; } to { opacity: 1; translate: 0 0; } }
 		.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 		[hidden] { display: none !important; }
+		@media (hover: none) {
+			body.sleeping .controls { opacity: .65; pointer-events: auto; }
+			button:hover .tooltip { opacity: 0; }
+		}
 		@media (prefers-reduced-motion: reduce) { .controls, .tooltip { transition: none; } .control-panel { animation: none; } }
 	</style>
 </head>
@@ -111,12 +115,12 @@
 			</div>
 		</section>
 		<section class="control-panel" id="light-panel" aria-labelledby="light-toggle" hidden>
-			<div class="panel-heading"><span>Light</span><output id="light-value" for="light" aria-live="off">50%</output></div>
+			<div class="panel-heading"><span>Light</span><output id="light-value" for="light" aria-live="off">70%</output></div>
 			<label class="auto-mode"><input id="light-auto" type="checkbox" aria-label="Automatic light" aria-controls="light light-limits" checked>Auto</label>
-			<input id="light" type="range" min="0" max="300" step="1" value="50" aria-label="Light" hidden>
+			<input id="light" type="range" min="0" max="300" step="1" value="70" aria-label="Light" hidden>
 			<div class="range-limits" id="light-limits">
-				<div class="limit-row"><label for="light-min">Min</label><input id="light-min" type="range" min="0" max="300" step="1" value="20" aria-label="Minimum light"><output id="light-min-value" for="light-min">20%</output></div>
-				<div class="limit-row"><label for="light-max">Max</label><input id="light-max" type="range" min="0" max="300" step="1" value="80" aria-label="Maximum light"><output id="light-max-value" for="light-max">80%</output></div>
+				<div class="limit-row"><label for="light-min">Min</label><input id="light-min" type="range" min="0" max="300" step="1" value="40" aria-label="Minimum light"><output id="light-min-value" for="light-min">40%</output></div>
+				<div class="limit-row"><label for="light-max">Max</label><input id="light-max" type="range" min="0" max="300" step="1" value="100" aria-label="Maximum light"><output id="light-max-value" for="light-max">100%</output></div>
 			</div>
 		</section>
 		<section class="control-panel" id="speed-panel" aria-labelledby="speed-toggle" hidden>
@@ -153,8 +157,8 @@
 		const colorRandom = randomGenerator();
 		const hueMinimum = -180 + Math.floor(colorRandom() * 241);
 		const colorMotion = {
-			hue: { automatic: true, minimum: hueMinimum, maximum: Math.min(180, hueMinimum + 60 + Math.floor(colorRandom() * 121)), phase: colorRandom() * TAU, period: 100, value: 0, unit: '\u00b0' },
-			light: { automatic: true, minimum: 20, maximum: 80, phase: Math.PI / 2, period: 70, value: 50, unit: '%' }
+			hue: { automatic: true, minimum: hueMinimum, maximum: Math.min(180, hueMinimum + 60 + Math.floor(colorRandom() * 121)), phase: colorRandom() * TAU, period: 35, value: 0, unit: '\u00b0' },
+			light: { automatic: true, minimum: 40, maximum: 100, phase: Math.PI / 2, period: 70, value: 70, unit: '%' }
 		};
 		const colorElements = Object.fromEntries(Object.keys(colorMotion).map(name => [name, {
 			input: document.getElementById(name),
@@ -474,7 +478,7 @@
 		}
 
 		function render(delta = 0) {
-			context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+			context.setTransform(canvas.width / width, 0, 0, canvas.height / height, 0, 0);
 			context.fillStyle = '#080b0e';
 			context.fillRect(0, 0, width, height);
 			if (previousScene) {
@@ -504,7 +508,8 @@
 			lastTimestamp = timestamp;
 			motionSpeed += (targetSpeed - motionSpeed) * (1 - Math.exp(-realDelta * 2));
 			const delta = paused ? 0 : realDelta * motionSpeed * (reducedMotion ? .2 : 1);
-			elapsed += delta;
+			const motionDelta = delta * 1.3;
+			elapsed += motionDelta;
 			updateColorMotion(delta);
 			const follow = 1 - Math.exp(-delta * 2.5);
 			pointer.x += (pointer.targetX - pointer.x) * follow;
@@ -514,7 +519,7 @@
 				transition = Math.min(1, transition + realDelta * motionSpeed / 9);
 				if (transition === 1) previousScene = null;
 			}
-			render(delta);
+			render(motionDelta);
 			frame = requestAnimationFrame(tick);
 		}
 
@@ -612,7 +617,7 @@
 		}
 
 		for (const name of ['hue', 'light', 'speed', 'tempo']) {
-			document.getElementById(`${name}-toggle`).addEventListener('click', () => {
+			document.getElementById(`${name}-toggle`).addEventListener('click', event => {
 				const wasOpen = openControl === name;
 				closeControl();
 				if (wasOpen) return;
@@ -621,7 +626,7 @@
 				const panel = document.getElementById(`${name}-panel`);
 				panel.hidden = false;
 				if (name === 'tempo') resetTaps();
-				panel.querySelector('input, button').focus({ preventScroll: true });
+				if (event.detail === 0) panel.querySelector('input, button').focus({ preventScroll: true });
 				wake();
 			});
 		}
@@ -690,28 +695,24 @@
 			resetTaps();
 			wake();
 		});
-		document.getElementById('tap').addEventListener('pointerdown', event => {
-			if (event.isPrimary && event.button === 0) tapTempo(performance.now());
-		});
-		document.getElementById('tap').addEventListener('click', event => {
-			if (event.detail === 0) tapTempo(performance.now());
-		});
+		document.getElementById('tap').addEventListener('click', () => tapTempo(performance.now()));
 		document.getElementById('reset-taps').addEventListener('click', resetTaps);
 		document.addEventListener('pointerdown', event => {
 			if (!controls.contains(event.target)) closeControl();
 		});
 		controls.addEventListener('focusout', event => {
-			if (!controls.contains(event.relatedTarget)) closeControl();
+			if (event.relatedTarget && !controls.contains(event.relatedTarget)) closeControl();
 		});
 
 		function resize() {
 			const oldWidth = width;
 			const oldHeight = height;
-			width = innerWidth;
-			height = innerHeight;
+			const bounds = canvas.getBoundingClientRect();
+			width = bounds.width;
+			height = bounds.height;
 			pixelRatio = Math.min(devicePixelRatio || 1, 1.5);
-			canvas.width = Math.round(width * pixelRatio);
-			canvas.height = Math.round(height * pixelRatio);
+			canvas.width = Math.ceil(width * pixelRatio);
+			canvas.height = Math.ceil(height * pixelRatio);
 			for (const effect of [...ripples, ...traces]) {
 				effect.x *= width / oldWidth;
 				effect.y *= height / oldHeight;
@@ -795,6 +796,7 @@
 			}
 		});
 		window.addEventListener('resize', resize);
+		window.visualViewport?.addEventListener('resize', resize);
 		updatePauseButton();
 		updateColorMotion(0);
 		resize();
