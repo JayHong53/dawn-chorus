@@ -1,0 +1,805 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+	<meta name="theme-color" content="#080b0e">
+	<title>Dawn Chorus</title>
+	<style>
+		:root { color-scheme: dark; }
+		* { box-sizing: border-box; }
+		html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #080b0e; }
+		body { font-family: Georgia, serif; }
+		canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+		body.sleeping, body.sleeping canvas { cursor: none; }
+		.controls {
+			position: fixed; bottom: max(25px, env(safe-area-inset-bottom)); left: 50%;
+			display: flex; justify-content: space-between; width: min(380px, calc(100vw - 16px));
+			transform: translateX(-50%); z-index: 2;
+			opacity: .65; transition: opacity 1.8s ease;
+		}
+		body.sleeping .controls { opacity: 0; pointer-events: none; }
+		body.sleeping .controls:focus-within { opacity: .85; pointer-events: auto; cursor: auto; }
+		.controls:hover, .controls:focus-within { opacity: 1; }
+		button {
+			position: relative; display: grid; place-items: center; width: 44px; height: 44px;
+			padding: 0; border: 1px solid transparent; border-radius: 50%;
+			background: transparent; color: #b6c1c6; cursor: pointer;
+			-webkit-tap-highlight-color: transparent;
+		}
+		button:hover { background: #b5c8ce0a; color: #e0e6e7; }
+		button:focus-visible { outline: 1px solid #9baeb7; outline-offset: 3px; }
+		button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; }
+		.tooltip {
+			position: absolute; bottom: 52px; left: 50%; transform: translateX(-50%);
+			font: 12px/1.4 Georgia, serif; letter-spacing: 0; white-space: nowrap;
+			color: #bec9cd; opacity: 0; pointer-events: none; transition: opacity .3s;
+		}
+		button:hover .tooltip, button:focus-visible .tooltip { opacity: 1; }
+		.controls > button { flex: 0 1 44px; min-width: 36px; }
+		button[aria-expanded="true"] { color: #e0e6e7; background: #b5c8ce14; }
+		.controls:has(.control-panel:not([hidden])) { opacity: 1; }
+		.controls:has(.control-panel:not([hidden])) .tooltip { display: none; }
+		.control-panel {
+			position: absolute; bottom: 58px; left: 50%; transform: translateX(-50%);
+			width: min(300px, calc(100vw - 32px)); padding: 18px 20px;
+			background: #10171bf5; border: 1px solid #a7bec124; border-radius: 6px;
+			color: #c3ced2; box-shadow: 0 8px 40px #0005; cursor: auto;
+			animation: unfold .22s ease-out;
+		}
+		.panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; }
+		output { font-variant-numeric: tabular-nums; white-space: nowrap; color: #98b1b7; }
+		input[type="range"] { display: block; width: 100%; height: 32px; margin: 12px 0 0; accent-color: #a4c1c6; cursor: pointer; }
+		input:focus-visible { outline: 1px solid #9baeb7; outline-offset: 3px; }
+		.auto-mode { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; cursor: pointer; }
+		.auto-mode input { width: 16px; height: 16px; margin: 0; accent-color: #a4c1c6; }
+		.range-limits { margin-top: 10px; }
+		.limit-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) 44px; align-items: center; gap: 8px; font-size: 12px; }
+		.limit-row input[type="range"] { height: 30px; margin: 0; }
+		.limit-row output { text-align: right; }
+		.tempo-actions { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+		.tap-button { flex: 1; height: 58px; border-radius: 4px; border-color: #a7bec130; font: 14px Georgia, serif; display: flex; justify-content: center; gap: 10px; touch-action: manipulation; }
+		.tap-button:active { background: #b5c8ce24; }
+		.tap-count { display: block; margin-top: 10px; font-size: 12px; color: #8d9ea5; }
+		@keyframes unfold { from { opacity: 0; translate: 0 5px; } to { opacity: 1; translate: 0 0; } }
+		.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+		[hidden] { display: none !important; }
+		@media (prefers-reduced-motion: reduce) { .controls, .tooltip { transition: none; } .control-panel { animation: none; } }
+	</style>
+</head>
+<body>
+	<canvas id="art" aria-label="An abstract nocturnal collage of drifting mist, branching shadows, silver dust, and water." role="img">
+		Your browser needs HTML Canvas to display this artwork.
+	</canvas>
+	<nav class="controls" aria-label="Visualizer controls">
+		<button id="pause" type="button" aria-label="Pause" aria-keyshortcuts="Space">
+			<svg id="pause-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6v12M15 6v12"/></svg>
+			<svg id="play-icon" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="m9 5 10 7-10 7Z"/></svg>
+			<span class="tooltip" id="pause-label">Pause</span>
+		</button>
+		<button id="regenerate" type="button" aria-label="Regenerate" aria-keyshortcuts="R">
+			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 10a7 7 0 1 0-1 7M19 5v5h-5"/></svg>
+			<span class="tooltip">Regenerate</span>
+		</button>
+		<button id="fullscreen" type="button" aria-label="Enter fullscreen">
+			<svg viewBox="0 0 24 24" aria-hidden="true"><path id="fullscreen-path" d="M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5"/></svg>
+			<span class="tooltip" id="fullscreen-label">Fullscreen</span>
+		</button>
+		<button id="hue-toggle" type="button" aria-label="Hue" aria-expanded="false" aria-controls="hue-panel">
+			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3C9 7 6 10 6 14a6 6 0 0 0 12 0c0-4-3-7-6-11Z"/><path d="M9 14a3 3 0 0 0 3 3"/></svg>
+			<span class="tooltip">Hue</span>
+		</button>
+		<button id="light-toggle" type="button" aria-label="Light" aria-expanded="false" aria-controls="light-panel">
+			<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg>
+			<span class="tooltip">Light</span>
+		</button>
+		<button id="speed-toggle" type="button" aria-label="Speed" aria-expanded="false" aria-controls="speed-panel">
+			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 18a9 9 0 1 1 14 0M12 12l5-5M5 12h1m12 0h1M12 5v1"/><circle cx="12" cy="12" r="1"/></svg>
+			<span class="tooltip">Speed</span>
+		</button>
+		<button id="tempo-toggle" type="button" aria-label="Tap tempo" aria-expanded="false" aria-controls="tempo-panel">
+			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-4 18h14L15 3ZM12 16l5-10M9 17h6"/></svg>
+			<span class="tooltip">Tap tempo</span>
+		</button>
+		<section class="control-panel" id="hue-panel" aria-labelledby="hue-toggle" hidden>
+			<div class="panel-heading"><span>Hue</span><output id="hue-value" for="hue" aria-live="off">0&deg;</output></div>
+			<label class="auto-mode"><input id="hue-auto" type="checkbox" aria-label="Automatic hue" aria-controls="hue hue-limits" checked>Auto</label>
+			<input id="hue" type="range" min="-180" max="180" step="1" value="0" aria-label="Hue" hidden>
+			<div class="range-limits" id="hue-limits">
+				<div class="limit-row"><label for="hue-min">Min</label><input id="hue-min" type="range" min="-180" max="180" step="1" value="-90" aria-label="Minimum hue"><output id="hue-min-value" for="hue-min">-90&deg;</output></div>
+				<div class="limit-row"><label for="hue-max">Max</label><input id="hue-max" type="range" min="-180" max="180" step="1" value="90" aria-label="Maximum hue"><output id="hue-max-value" for="hue-max">90&deg;</output></div>
+			</div>
+		</section>
+		<section class="control-panel" id="light-panel" aria-labelledby="light-toggle" hidden>
+			<div class="panel-heading"><span>Light</span><output id="light-value" for="light" aria-live="off">50%</output></div>
+			<label class="auto-mode"><input id="light-auto" type="checkbox" aria-label="Automatic light" aria-controls="light light-limits" checked>Auto</label>
+			<input id="light" type="range" min="0" max="300" step="1" value="50" aria-label="Light" hidden>
+			<div class="range-limits" id="light-limits">
+				<div class="limit-row"><label for="light-min">Min</label><input id="light-min" type="range" min="0" max="300" step="1" value="20" aria-label="Minimum light"><output id="light-min-value" for="light-min">20%</output></div>
+				<div class="limit-row"><label for="light-max">Max</label><input id="light-max" type="range" min="0" max="300" step="1" value="80" aria-label="Maximum light"><output id="light-max-value" for="light-max">80%</output></div>
+			</div>
+		</section>
+		<section class="control-panel" id="speed-panel" aria-labelledby="speed-toggle" hidden>
+			<div class="panel-heading"><label for="speed">Speed</label><output id="speed-value" for="speed">1.00x</output></div>
+			<input id="speed" type="range" min="0.25" max="4" step="0.01" value="1">
+		</section>
+		<section class="control-panel" id="tempo-panel" aria-labelledby="tempo-toggle" hidden>
+			<div class="panel-heading"><span>Tap tempo</span><output id="tempo-value" aria-live="polite">-- BPM</output></div>
+			<div class="tempo-actions">
+				<button id="tap" class="tap-button" type="button" aria-label="Tap beat"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/></svg>Tap</button>
+				<button id="reset-taps" type="button" aria-label="Reset taps" title="Reset taps"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10a7 7 0 1 1 1 7M5 5v5h5"/></svg></button>
+			</div>
+			<output id="tap-count" class="tap-count">0 taps</output>
+		</section>
+	</nav>
+	<span id="status" class="sr-only" role="status"></span>
+	<script>
+		'use strict';
+
+		const canvas = document.getElementById('art');
+		const context = canvas.getContext('2d', { alpha: false });
+		const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
+		const pauseButton = document.getElementById('pause');
+		const fullscreenButton = document.getElementById('fullscreen');
+		const controls = document.querySelector('.controls');
+		const hueInput = document.getElementById('hue');
+		const lightInput = document.getElementById('light');
+		const speedInput = document.getElementById('speed');
+		const tapTimes = [];
+		let openControl = null;
+		let targetSpeed = 1;
+		let motionSpeed = 1;
+		const TAU = Math.PI * 2;
+		const colorRandom = randomGenerator();
+		const hueMinimum = -180 + Math.floor(colorRandom() * 241);
+		const colorMotion = {
+			hue: { automatic: true, minimum: hueMinimum, maximum: Math.min(180, hueMinimum + 60 + Math.floor(colorRandom() * 121)), phase: colorRandom() * TAU, period: 100, value: 0, unit: '\u00b0' },
+			light: { automatic: true, minimum: 20, maximum: 80, phase: Math.PI / 2, period: 70, value: 50, unit: '%' }
+		};
+		const colorElements = Object.fromEntries(Object.keys(colorMotion).map(name => [name, {
+			input: document.getElementById(name),
+			value: document.getElementById(`${name}-value`),
+			automatic: document.getElementById(`${name}-auto`),
+			limits: document.getElementById(`${name}-limits`),
+			minimum: document.getElementById(`${name}-min`),
+			maximum: document.getElementById(`${name}-max`),
+			minimumValue: document.getElementById(`${name}-min-value`),
+			maximumValue: document.getElementById(`${name}-max-value`)
+		}]));
+		let width = innerWidth;
+		let height = innerHeight;
+		let pixelRatio = 1;
+		let reducedMotion = motionPreference.matches;
+		let paused = reducedMotion;
+		let frame = 0;
+		let lastTimestamp = 0;
+		let elapsed = 0;
+		let transition = 1;
+		let previousScene = null;
+		let idleTimer;
+		let pointerDown = null;
+		const pointer = { x: -1000, y: -1000, targetX: -1000, targetY: -1000, strength: 0, active: false };
+		const ripples = [];
+		const traces = [];
+
+		function surface(size) {
+			const layer = document.createElement('canvas');
+			layer.width = layer.height = size;
+			return layer;
+		}
+
+		function randomGenerator() {
+			let seed = crypto.getRandomValues(new Uint32Array(1))[0];
+			return () => {
+				seed |= 0;
+				seed = seed + 0x6D2B79F5 | 0;
+				let value = Math.imul(seed ^ seed >>> 15, 1 | seed);
+				value ^= value + Math.imul(value ^ value >>> 7, 61 | value);
+				return ((value ^ value >>> 14) >>> 0) / 4294967296;
+			};
+		}
+
+		function smooth(value) { return value * value * (3 - 2 * value); }
+		function wave(time, phase, speed = 1) {
+			return .5 + .32 * Math.sin(time * .017 * speed + phase) + .18 * Math.sin(time * .029 * speed + phase * 2.31);
+		}
+
+		function makeGlow(color) {
+			const image = surface(128);
+			const paint = image.getContext('2d');
+			const gradient = paint.createRadialGradient(64, 64, 0, 64, 64, 64);
+			gradient.addColorStop(0, `rgba(${color},.65)`);
+			gradient.addColorStop(.12, `rgba(${color},.26)`);
+			gradient.addColorStop(.4, `rgba(${color},.065)`);
+			gradient.addColorStop(1, `rgba(${color},0)`);
+			paint.fillStyle = gradient;
+			paint.fillRect(0, 0, 128, 128);
+			return image;
+		}
+
+		const silver = makeGlow('182,205,213');
+		const amber = makeGlow('184,153,114');
+		const violet = makeGlow('118,108,144');
+		const teal = makeGlow('91,144,143');
+
+		function makeMist(random) {
+			const image = surface(384);
+			const paint = image.getContext('2d');
+			for (let index = 0; index < 65; index++) {
+				const positionX = random() * 384;
+				const positionY = random() * 384;
+				const radius = 25 + random() * 135;
+				const gradient = paint.createRadialGradient(positionX, positionY, 0, positionX, positionY, radius);
+				gradient.addColorStop(0, `rgba(147,164,174,${.025 + random() * .045})`);
+				gradient.addColorStop(1, 'rgba(110,133,149,0)');
+				paint.fillStyle = gradient;
+				paint.fillRect(0, 0, 384, 384);
+			}
+			const fade = paint.createRadialGradient(192, 192, 30, 192, 192, 192);
+			fade.addColorStop(0, '#fff');
+			fade.addColorStop(1, '#fff0');
+			paint.globalCompositeOperation = 'destination-in';
+			paint.fillStyle = fade;
+			paint.fillRect(0, 0, 384, 384);
+			return image;
+		}
+
+		function makeBranches(random, depth) {
+			const image = surface(640);
+			const paint = image.getContext('2d');
+			paint.lineCap = 'round';
+			function branch(positionX, positionY, angle, length, thickness, generation) {
+				if (generation === 0 || length < 5) return;
+				const bend = (random() - .5) * .9;
+				const endX = positionX + Math.cos(angle + bend) * length;
+				const endY = positionY + Math.sin(angle + bend) * length;
+				paint.strokeStyle = depth === 0 ? 'rgba(2,5,9,.65)' : 'rgba(81,104,114,.13)';
+				paint.lineWidth = thickness;
+				paint.beginPath();
+				paint.moveTo(positionX, positionY);
+				paint.quadraticCurveTo(positionX + Math.cos(angle) * length * .6, positionY + Math.sin(angle) * length * .6, endX, endY);
+				paint.stroke();
+				branch(endX, endY, angle + bend * .65, length * (.7 + random() * .12), thickness * .7, generation - 1);
+				if (random() > .21) {
+					branch(endX, endY, angle + (random() > .5 ? 1 : -1) * (.3 + random() * .8), length * (.4 + random() * .32), thickness * .48, generation - 1);
+				}
+			}
+			for (let index = 0; index < 7; index++) {
+				branch(random() * 640, 700 + random() * 80, -Math.PI / 2 + (random() - .5) * 1.5, 115 + random() * 145, 3 + random() * 12, 7);
+			}
+			const blurred = surface(640);
+			const blurPaint = blurred.getContext('2d');
+			blurPaint.filter = `blur(${depth === 0 ? 9 : 2.5}px)`;
+			blurPaint.drawImage(image, 0, 0);
+			return blurred;
+		}
+
+		function makeScene() {
+			const random = randomGenerator();
+			const phase = random() * TAU;
+			return {
+				phase,
+				random,
+				mist: makeMist(random),
+				branches: [makeBranches(random, 0), makeBranches(random, 1)],
+				lean: (random() - .5) * .6,
+				lightX: .25 + random() * .5,
+				lightY: .3 + random() * .28,
+				particles: Array.from({ length: width < 600 ? 95 : 155 }, () => ({
+					x: random(), y: random(), phase: random() * TAU,
+					distance: .3 + random() * 3.3,
+					depth: .15 + random() * .85, size: .35 + random() * 1.1,
+					speed: .4 + random() * .6, warmth: random() > .965,
+					offsetX: 0, offsetY: 0
+				}))
+			};
+		}
+
+		const grain = surface(192);
+		const grainPaint = grain.getContext('2d');
+		const grainData = grainPaint.createImageData(192, 192);
+		const grainRandom = randomGenerator();
+		for (let index = 0; index < grainData.data.length; index += 4) {
+			const shade = grainRandom() * 255;
+			grainData.data[index] = grainData.data[index + 1] = grainData.data[index + 2] = shade;
+			grainData.data[index + 3] = 19;
+		}
+		grainPaint.putImageData(grainData, 0, 0);
+		const grainPattern = context.createPattern(grain, 'repeat');
+		let scene = makeScene();
+
+		function glow(image, positionX, positionY, radiusX, radiusY, opacity) {
+			context.globalAlpha = opacity;
+			context.drawImage(image, positionX - radiusX, positionY - radiusY, radiusX * 2, radiusY * 2);
+		}
+
+		function drawScene(current, opacity, delta) {
+			const phase = current.phase;
+			const time = elapsed;
+			const breath = smooth(wave(time, phase));
+			const abundance = smooth(wave(time, phase + 1.2, .47));
+			const scale = Math.max(width, height);
+			const lightX = width * (current.lightX + .055 * Math.sin(time * .008 + phase));
+			const lightY = height * (current.lightY + .07 * Math.sin(time * .011 + phase));
+			const vanishingX = width * (.5 + .025 * Math.sin(time * .019 + phase));
+			const vanishingY = height * (.45 + .02 * Math.sin(time * .013 + phase));
+
+			context.globalCompositeOperation = 'screen';
+			glow(teal, lightX, lightY, scale * .78, scale * .43, opacity * (.22 + .23 * breath));
+			glow(violet, width * .8, height * .64, scale * .72, scale * .52, opacity * (.18 + .3 * wave(time, phase + 3, .65)));
+			glow(silver, lightX, lightY, scale * .32, scale * .29, opacity * (.13 + .37 * breath));
+			const dawn = Math.pow(wave(time, phase + 4, .35), 4);
+			glow(amber, width * .23, height * .46, scale * .34, scale * .21, opacity * dawn * .34);
+
+			for (let index = 0; index < 6; index++) {
+				const drift = time * (.004 + index * .001);
+				const passage = (time * .016 + index / 6 + phase / TAU) % 1;
+				const perspective = .95 / (3.5 - passage * 3);
+				const dissolve = Math.sin(passage * Math.PI) ** 2;
+				const positionX = vanishingX + (width * (.08 + index * .17) - vanishingX + Math.sin(drift + phase + index * 2) * width * .17) * perspective;
+				const positionY = vanishingY + height * .34 * Math.sin(index * 2.4 + phase) * perspective;
+				context.save();
+				context.translate(positionX, positionY);
+				context.scale(perspective, perspective);
+				context.rotate(current.lean + Math.sin(drift * .3 + index) * .12);
+				context.globalAlpha = opacity * dissolve * (.15 + .23 * abundance) * (.5 + .5 * wave(time, phase + index));
+				context.drawImage(current.mist, -scale * .65, -scale * .21, scale * 1.3, scale * .42);
+				context.restore();
+			}
+
+			context.globalCompositeOperation = 'source-over';
+			for (let index = 0; index < 4; index++) {
+				const passage = (time * .018 + index * .25 + phase / TAU) % 1;
+				const perspective = 1.1 / (3.4 - passage * 2.9);
+				const side = index % 2 === 0 ? -.58 : .58;
+				context.save();
+				context.translate(vanishingX + width * side * perspective, vanishingY + height * .12 * perspective);
+				context.scale(perspective, perspective);
+				context.rotate(current.lean + Math.sin(time * .004 + phase) * .05);
+				context.globalAlpha = opacity * Math.sin(passage * Math.PI) ** 2 * (.26 + .54 * wave(time, phase + index * 2, .6));
+				context.drawImage(current.branches[index % 2], -scale * .45, -height * .62, scale * .9, height * 1.25);
+				context.restore();
+			}
+
+			context.globalCompositeOperation = 'screen';
+			for (let index = 0; index < 11; index++) {
+				const ribbonPhase = phase + index * .69;
+				const visibility = Math.pow(wave(time, ribbonPhase, .55), 3);
+				const passage = (time * .012 + index / 11 + phase / TAU) % 1;
+				const perspective = .9 / (2.5 - passage * 2);
+				const baseY = height * (.33 + index * .037);
+				context.save();
+				context.translate(vanishingX, vanishingY);
+				context.scale(perspective, perspective);
+				context.translate(-vanishingX, -vanishingY);
+				context.beginPath();
+				for (let step = 0; step <= 28; step++) {
+					const fraction = step / 28;
+					const positionX = width * (.08 + fraction * .84);
+					const envelope = Math.sin(fraction * Math.PI);
+					const positionY = baseY + envelope * (Math.sin(fraction * 5 + time * .025 + ribbonPhase) * height * .045 + Math.sin(fraction * 12 - time * .017) * height * .014);
+					if (step === 0) context.moveTo(positionX, positionY);
+					else context.lineTo(positionX, positionY);
+				}
+				context.strokeStyle = index % 3 ? '#78979c' : '#9792a6';
+				context.globalAlpha = opacity * visibility * Math.sin(passage * Math.PI) ** 2 * (.013 + abundance * .029);
+				context.lineWidth = index % 3 === 0 ? 3 : .65;
+				context.stroke();
+				context.restore();
+			}
+
+			for (const particle of current.particles) {
+				particle.distance -= delta * .085 * (.75 + particle.speed * .25);
+				if (particle.distance < .3) {
+					particle.distance += 3.3;
+					particle.x = current.random();
+					particle.y = current.random();
+					particle.offsetX = particle.offsetY = 0;
+				}
+				const perspective = .9 / particle.distance;
+				const baseX = vanishingX + ((particle.x - .5) * width * 2.3 + Math.sin(time * .024 * particle.speed + particle.phase) * 22 * particle.depth) * perspective;
+				const baseY = vanishingY + ((particle.y - .5) * height * 2.3 + Math.cos(time * .018 + particle.phase) * 13) * perspective;
+				const distanceX = baseX - pointer.x;
+				const distanceY = baseY - pointer.y;
+				const distance = Math.hypot(distanceX, distanceY);
+				const reach = Math.min(width, height) * .24;
+				const influence = Math.max(0, 1 - distance / reach) * pointer.strength;
+				const response = 1 - Math.exp(-delta * .65);
+				particle.offsetX += ((distanceX / (distance + 1) * 21 - distanceY / (distance + 1) * 8) * influence - particle.offsetX) * response;
+				particle.offsetY += ((distanceY / (distance + 1) * 21 + distanceX / (distance + 1) * 8) * influence - particle.offsetY) * response;
+				const positionX = baseX + particle.offsetX;
+				const positionY = baseY + particle.offsetY;
+				const life = Math.pow(.5 + .5 * Math.sin(time * .045 * particle.speed + particle.phase), 2);
+				const edge = Math.max(0, Math.min(1, baseX / width * 10, (1 - baseX / width) * 10, baseY / height * 10, (1 - baseY / height) * 10));
+				const passage = smooth(Math.max(0, Math.min(1, (particle.distance - .3) / .35))) * smooth(Math.max(0, Math.min(1, (3.6 - particle.distance) / .7)));
+				const alpha = opacity * edge * passage * (.15 + .85 * life) * (.13 + .4 * abundance) * particle.depth;
+				const size = particle.size * (particle.depth < .4 ? 13 : 5) * (.55 + perspective * .65);
+				glow(particle.warmth ? amber : silver, positionX, positionY, size, size, alpha);
+				if (particle.depth > .65) {
+					context.globalAlpha = alpha * .53;
+					context.fillStyle = particle.warmth ? '#c7b298' : '#bbd0d6';
+					context.beginPath();
+					context.arc(positionX, positionY, particle.size * .45 * Math.sqrt(perspective), 0, TAU);
+					context.fill();
+				}
+			}
+
+			const reflection = Math.pow(wave(time, phase + 2.3, .4), 2);
+			for (let index = 0; index < 20; index++) {
+				const progress = (index / 20 + time * .009) % 1;
+				const positionY = height * (.63 + progress * .28);
+				const positionX = lightX + Math.sin(time * .06 + index * 1.7 + phase) * (8 + progress * 32);
+				glow(silver, positionX, positionY, (18 + progress * width * .13) * (.4 + wave(time, index)), .7 + progress * 1.6, opacity * reflection * .06 * Math.sin(progress * Math.PI) ** 2);
+			}
+			context.globalAlpha = 1;
+			context.globalCompositeOperation = 'source-over';
+		}
+
+		function drawInteraction(delta) {
+			context.globalCompositeOperation = 'screen';
+			for (let index = traces.length - 1; index >= 0; index--) {
+				const trace = traces[index];
+				trace.age += delta;
+				if (trace.age > 6) { traces.splice(index, 1); continue; }
+				const life = 1 - trace.age / 6;
+				glow(teal, trace.x, trace.y - trace.age * 2, 36 + trace.age * 11, 24 + trace.age * 5, life * life * .055);
+			}
+			for (let index = ripples.length - 1; index >= 0; index--) {
+				const ripple = ripples[index];
+				ripple.age += delta;
+				if (ripple.age > 12) { ripples.splice(index, 1); continue; }
+				const life = Math.sin(Math.PI * Math.min(1, (ripple.age + .35) / 12));
+				const radius = 12 + ripple.age * 13;
+				glow(silver, ripple.x, ripple.y, radius * 1.8, radius * 1.2, life * .19);
+				context.save();
+				context.beginPath();
+				context.ellipse(ripple.x, ripple.y, radius * 1.9, radius * .62, -.15, 0, TAU);
+				context.clip();
+				context.globalAlpha = life * .15;
+				const size = Math.max(width, height) * .9;
+				context.drawImage(scene.branches[1], ripple.x - size * .5, ripple.y - size * .6, size, size);
+				context.restore();
+				for (let ring = 0; ring < 3; ring++) {
+					const ringRadius = Math.max(1, radius - ring * 9);
+					context.beginPath();
+					context.ellipse(ripple.x, ripple.y, ringRadius * 1.9, ringRadius * .62, -.15, 0, TAU);
+					context.strokeStyle = '#b7cbd1';
+					context.globalAlpha = life * .07 * (1 - ring * .25);
+					context.lineWidth = .6;
+					context.stroke();
+				}
+			}
+			context.globalAlpha = 1;
+			context.globalCompositeOperation = 'source-over';
+		}
+
+		function render(delta = 0) {
+			context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+			context.fillStyle = '#080b0e';
+			context.fillRect(0, 0, width, height);
+			if (previousScene) {
+				const mix = smooth(transition);
+				drawScene(previousScene, 1 - mix, delta);
+				drawScene(scene, mix, delta);
+			} else drawScene(scene, 1, delta);
+			drawInteraction(delta);
+			const vignette = context.createRadialGradient(width * .49, height * .46, Math.min(width, height) * .13, width * .5, height * .5, Math.hypot(width, height) * .62);
+			vignette.addColorStop(0, '#02040500');
+			vignette.addColorStop(.6, '#02040530');
+			vignette.addColorStop(1, '#020405dc');
+			context.fillStyle = vignette;
+			context.fillRect(0, 0, width, height);
+			context.save();
+			context.globalAlpha = .28;
+			context.translate(Math.sin(elapsed * .13) * 90, Math.cos(elapsed * .11) * 90);
+			context.fillStyle = grainPattern;
+			context.fillRect(-100, -100, width + 200, height + 200);
+			context.restore();
+		}
+
+		function tick(timestamp) {
+			frame = 0;
+			if (document.hidden || (paused && !previousScene)) return;
+			const realDelta = lastTimestamp ? Math.min((timestamp - lastTimestamp) / 1000, .05) : 0;
+			lastTimestamp = timestamp;
+			motionSpeed += (targetSpeed - motionSpeed) * (1 - Math.exp(-realDelta * 2));
+			const delta = paused ? 0 : realDelta * motionSpeed * (reducedMotion ? .2 : 1);
+			elapsed += delta;
+			updateColorMotion(delta);
+			const follow = 1 - Math.exp(-delta * 2.5);
+			pointer.x += (pointer.targetX - pointer.x) * follow;
+			pointer.y += (pointer.targetY - pointer.y) * follow;
+			pointer.strength += ((pointer.active ? 1 : 0) - pointer.strength) * follow;
+			if (previousScene) {
+				transition = Math.min(1, transition + realDelta * motionSpeed / 9);
+				if (transition === 1) previousScene = null;
+			}
+			render(delta);
+			frame = requestAnimationFrame(tick);
+		}
+
+		function start() {
+			if (!frame && (!paused || previousScene) && !document.hidden) {
+				lastTimestamp = 0;
+				frame = requestAnimationFrame(tick);
+			}
+		}
+
+		function stop() {
+			cancelAnimationFrame(frame);
+			frame = 0;
+			lastTimestamp = 0;
+		}
+
+		function updatePauseButton() {
+			const label = paused ? 'Play' : 'Pause';
+			pauseButton.setAttribute('aria-label', label);
+			document.getElementById('pause-label').textContent = label;
+			document.getElementById('pause-icon').hidden = paused;
+			document.getElementById('play-icon').hidden = !paused;
+		}
+
+		function togglePause() {
+			paused = !paused;
+			updatePauseButton();
+			if (paused) stop();
+			start();
+		}
+
+		function regenerate() {
+			if (previousScene) return;
+			previousScene = scene;
+			scene = makeScene();
+			transition = 0;
+			if (reducedMotion) {
+				previousScene = null;
+				transition = 1;
+			}
+			render();
+			start();
+		}
+
+		function wake() {
+			document.body.classList.remove('sleeping');
+			clearTimeout(idleTimer);
+			idleTimer = setTimeout(() => {
+				if (!openControl) document.body.classList.add('sleeping');
+				pointer.active = false;
+			}, 3200);
+		}
+
+		function closeControl(restoreFocus = false) {
+			if (!openControl) return;
+			const toggle = document.getElementById(`${openControl}-toggle`);
+			document.getElementById(`${openControl}-panel`).hidden = true;
+			toggle.setAttribute('aria-expanded', 'false');
+			openControl = null;
+			if (restoreFocus) toggle.focus();
+			wake();
+		}
+
+		function resetTaps() {
+			tapTimes.length = 0;
+			document.getElementById('tempo-value').value = '-- BPM';
+			document.getElementById('tap-count').value = '0 taps';
+		}
+
+		function setSpeed(value) {
+			targetSpeed = Math.round(Math.min(4, Math.max(.25, value)) * 100) / 100;
+			speedInput.value = targetSpeed.toFixed(2);
+			document.getElementById('speed-value').value = `${targetSpeed.toFixed(2)}x`;
+			speedInput.setAttribute('aria-valuetext', `${targetSpeed.toFixed(2)} times`);
+		}
+
+		function tapTempo(timestamp) {
+			const lastTap = tapTimes[tapTimes.length - 1];
+			if (lastTap !== undefined && timestamp - lastTap < 250) return;
+			if (lastTap !== undefined && timestamp - lastTap > 2000) resetTaps();
+			tapTimes.push(timestamp);
+			if (tapTimes.length > 9) tapTimes.shift();
+			document.getElementById('tap-count').value = `${tapTimes.length} ${tapTimes.length === 1 ? 'tap' : 'taps'}`;
+			if (tapTimes.length < 3) return;
+			const intervals = tapTimes.slice(1).map((time, index) => time - tapTimes[index]);
+			const sorted = [...intervals].sort((first, second) => first - second);
+			const middle = Math.floor(sorted.length / 2);
+			const median = sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+			const consistent = intervals.filter(interval => Math.abs(interval - median) <= median * .25);
+			if (consistent.length < 2) return;
+			const average = consistent.reduce((total, interval) => total + interval, 0) / consistent.length;
+			const bpm = Math.min(240, Math.max(30, Math.round(60000 / average)));
+			document.getElementById('tempo-value').value = `${bpm} BPM`;
+			setSpeed(bpm / 60);
+		}
+
+		for (const name of ['hue', 'light', 'speed', 'tempo']) {
+			document.getElementById(`${name}-toggle`).addEventListener('click', () => {
+				const wasOpen = openControl === name;
+				closeControl();
+				if (wasOpen) return;
+				openControl = name;
+				document.getElementById(`${name}-toggle`).setAttribute('aria-expanded', 'true');
+				const panel = document.getElementById(`${name}-panel`);
+				panel.hidden = false;
+				if (name === 'tempo') resetTaps();
+				panel.querySelector('input, button').focus({ preventScroll: true });
+				wake();
+			});
+		}
+		function applyColor() {
+			canvas.style.filter = `hue-rotate(${colorMotion.hue.value.toFixed(3)}deg) brightness(${(colorMotion.light.value / 100).toFixed(4)})`;
+			for (const [name, settings] of Object.entries(colorMotion)) {
+				const elements = colorElements[name];
+				const displayed = Math.round(settings.value);
+				if (Number(elements.input.value) !== displayed) elements.input.value = displayed;
+				const label = `${displayed}${settings.unit}`;
+				if (elements.value.value !== label) elements.value.value = label;
+			}
+		}
+
+		function updateColorMotion(delta) {
+			for (const settings of Object.values(colorMotion)) {
+				if (!settings.automatic) continue;
+				settings.phase = (settings.phase + delta * TAU / settings.period) % TAU;
+				settings.value = settings.minimum + (settings.maximum - settings.minimum) * (.5 - .5 * Math.cos(settings.phase));
+			}
+			applyColor();
+		}
+
+		function alignColorPhase(settings) {
+			settings.value = Math.min(settings.maximum, Math.max(settings.minimum, settings.value));
+			const range = settings.maximum - settings.minimum;
+			const phase = Math.acos(Math.max(-1, Math.min(1, range ? 1 - 2 * (settings.value - settings.minimum) / range : 1)));
+			settings.phase = settings.phase > Math.PI ? TAU - phase : phase;
+		}
+
+		for (const [name, settings] of Object.entries(colorMotion)) {
+			const elements = colorElements[name];
+			function showLimits() {
+				elements.minimum.value = settings.minimum;
+				elements.maximum.value = settings.maximum;
+				elements.minimumValue.value = `${settings.minimum}${settings.unit}`;
+				elements.maximumValue.value = `${settings.maximum}${settings.unit}`;
+			}
+			showLimits();
+			elements.automatic.addEventListener('change', () => {
+				settings.automatic = elements.automatic.checked;
+				elements.input.hidden = settings.automatic;
+				elements.limits.hidden = !settings.automatic;
+				if (settings.automatic) alignColorPhase(settings);
+				applyColor();
+				wake();
+			});
+			elements.input.addEventListener('input', () => {
+				settings.value = Number(elements.input.value);
+				applyColor();
+				wake();
+			});
+			for (const bound of ['minimum', 'maximum']) {
+				elements[bound].addEventListener('input', () => {
+					const value = Number(elements[bound].value);
+					settings[bound] = bound === 'minimum' ? Math.min(value, settings.maximum) : Math.max(value, settings.minimum);
+					alignColorPhase(settings);
+					showLimits();
+					applyColor();
+					wake();
+				});
+			}
+		}
+		speedInput.addEventListener('input', () => {
+			setSpeed(Number(speedInput.value));
+			resetTaps();
+			wake();
+		});
+		document.getElementById('tap').addEventListener('pointerdown', event => {
+			if (event.isPrimary && event.button === 0) tapTempo(performance.now());
+		});
+		document.getElementById('tap').addEventListener('click', event => {
+			if (event.detail === 0) tapTempo(performance.now());
+		});
+		document.getElementById('reset-taps').addEventListener('click', resetTaps);
+		document.addEventListener('pointerdown', event => {
+			if (!controls.contains(event.target)) closeControl();
+		});
+		controls.addEventListener('focusout', event => {
+			if (!controls.contains(event.relatedTarget)) closeControl();
+		});
+
+		function resize() {
+			const oldWidth = width;
+			const oldHeight = height;
+			width = innerWidth;
+			height = innerHeight;
+			pixelRatio = Math.min(devicePixelRatio || 1, 1.5);
+			canvas.width = Math.round(width * pixelRatio);
+			canvas.height = Math.round(height * pixelRatio);
+			for (const effect of [...ripples, ...traces]) {
+				effect.x *= width / oldWidth;
+				effect.y *= height / oldHeight;
+			}
+			render();
+		}
+
+		canvas.addEventListener('pointermove', event => {
+			if (!pointer.active) { pointer.x = event.clientX; pointer.y = event.clientY; }
+			pointer.targetX = event.clientX;
+			pointer.targetY = event.clientY;
+			pointer.active = true;
+			if (!paused && !reducedMotion) {
+				const last = traces[traces.length - 1];
+				if (!last || Math.hypot(last.x - event.clientX, last.y - event.clientY) > 14) {
+					if (traces.length >= 60) traces.shift();
+					traces.push({ x: event.clientX, y: event.clientY, age: 0 });
+				}
+			}
+		});
+		canvas.addEventListener('pointerleave', () => { pointer.active = false; });
+		canvas.addEventListener('pointerdown', event => {
+			if (!event.isPrimary || event.button !== 0) return;
+			pointerDown = { x: event.clientX, y: event.clientY, id: event.pointerId };
+			canvas.setPointerCapture(event.pointerId);
+		});
+		canvas.addEventListener('pointerup', event => {
+			if (pointerDown && pointerDown.id === event.pointerId && Math.hypot(pointerDown.x - event.clientX, pointerDown.y - event.clientY) < 18) {
+				if (ripples.length >= 8) ripples.shift();
+				ripples.push({ x: event.clientX, y: event.clientY, age: paused || reducedMotion ? 2 : 0 });
+				if (paused) render();
+			}
+			pointerDown = null;
+			if (event.pointerType !== 'mouse') pointer.active = false;
+		});
+		canvas.addEventListener('pointercancel', () => { pointerDown = null; pointer.active = false; });
+		document.addEventListener('pointermove', wake, { passive: true });
+		document.addEventListener('pointerdown', wake, { passive: true });
+		document.addEventListener('focusin', wake);
+		document.addEventListener('keydown', event => {
+			wake();
+			if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return;
+			if (event.key === 'Escape') { closeControl(true); return; }
+			if (event.target.matches('input, textarea, select') || event.target.isContentEditable) return;
+			if (event.code === 'Space' && event.target.tagName !== 'BUTTON') {
+				event.preventDefault();
+				togglePause();
+			} else if (event.key.toLowerCase() === 'r') regenerate();
+		});
+		pauseButton.addEventListener('click', togglePause);
+		document.getElementById('regenerate').addEventListener('click', regenerate);
+		fullscreenButton.hidden = !document.fullscreenEnabled;
+		fullscreenButton.addEventListener('click', async () => {
+			try {
+				if (document.fullscreenElement) await document.exitFullscreen();
+				else await document.documentElement.requestFullscreen();
+			} catch {
+				document.getElementById('status').textContent = 'Fullscreen is unavailable in this browser window.';
+			}
+		});
+		document.addEventListener('fullscreenchange', () => {
+			const active = Boolean(document.fullscreenElement);
+			fullscreenButton.setAttribute('aria-label', active ? 'Exit fullscreen' : 'Enter fullscreen');
+			document.getElementById('fullscreen-label').textContent = active ? 'Exit fullscreen' : 'Fullscreen';
+			document.getElementById('fullscreen-path').setAttribute('d', active
+				? 'M4 9h5V4m6 0v5h5M9 20v-5H4m16 0h-5v5'
+				: 'M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5');
+		});
+		document.addEventListener('visibilitychange', () => {
+			if (document.hidden) stop();
+			else { render(); start(); }
+		});
+		motionPreference.addEventListener('change', event => {
+			reducedMotion = event.matches;
+			if (reducedMotion) {
+				paused = true;
+				previousScene = null;
+				stop();
+				updatePauseButton();
+				render();
+			}
+		});
+		window.addEventListener('resize', resize);
+		updatePauseButton();
+		updateColorMotion(0);
+		resize();
+		wake();
+		start();
+	</script>
+</body>
+</html>
