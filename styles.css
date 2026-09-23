@@ -1,0 +1,63 @@
+:root { color-scheme: dark; }
+		* { box-sizing: border-box; }
+		html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; background: #080b0e; }
+		body { position: fixed; inset: 0; height: 100dvh; font-family: Georgia, serif; }
+		canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; }
+		body.sleeping, body.sleeping canvas { cursor: none; }
+		.controls {
+			position: fixed; bottom: max(25px, env(safe-area-inset-bottom)); left: 50%;
+			display: flex; justify-content: space-between; width: min(380px, calc(100vw - 16px));
+			transform: translateX(-50%); z-index: 2;
+			opacity: .65; transition: opacity 1.8s ease;
+		}
+		body.sleeping .controls { opacity: 0; pointer-events: none; }
+		body.sleeping .controls:focus-within { opacity: .85; pointer-events: auto; cursor: auto; }
+		.controls:hover, .controls:focus-within { opacity: 1; }
+		button {
+			position: relative; display: grid; place-items: center; width: 44px; height: 44px;
+			padding: 0; border: 1px solid transparent; border-radius: 50%;
+			background: transparent; color: #b6c1c6; cursor: pointer; touch-action: manipulation;
+			-webkit-tap-highlight-color: transparent;
+		}
+		button:hover { background: #b5c8ce0a; color: #e0e6e7; }
+		button:focus-visible { outline: 1px solid #9baeb7; outline-offset: 3px; }
+		button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; }
+		.tooltip {
+			position: absolute; bottom: 52px; left: 50%; transform: translateX(-50%);
+			font: 12px/1.4 Georgia, serif; letter-spacing: 0; white-space: nowrap;
+			color: #bec9cd; opacity: 0; pointer-events: none; transition: opacity .3s;
+		}
+		button:hover .tooltip, button:focus-visible .tooltip { opacity: 1; }
+		.controls > button { flex: 0 1 44px; min-width: 36px; }
+		button[aria-expanded="true"] { color: #e0e6e7; background: #b5c8ce14; }
+		.controls:has(.control-panel:not([hidden])) { opacity: 1; }
+		.controls:has(.control-panel:not([hidden])) .tooltip { display: none; }
+		.control-panel {
+			position: absolute; bottom: 58px; left: 50%; transform: translateX(-50%);
+			width: min(300px, calc(100vw - 32px)); padding: 18px 20px;
+			background: #10171bf5; border: 1px solid #a7bec124; border-radius: 6px;
+			color: #c3ced2; box-shadow: 0 8px 40px #0005; cursor: auto;
+			animation: unfold .22s ease-out;
+		}
+		.panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; }
+		output { font-variant-numeric: tabular-nums; white-space: nowrap; color: #98b1b7; }
+		input[type="range"] { display: block; width: 100%; height: 32px; margin: 12px 0 0; accent-color: #a4c1c6; cursor: pointer; touch-action: none; }
+		input:focus-visible { outline: 1px solid #9baeb7; outline-offset: 3px; }
+		.auto-mode { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; cursor: pointer; }
+		.auto-mode input { width: 16px; height: 16px; margin: 0; accent-color: #a4c1c6; }
+		.range-limits { margin-top: 10px; }
+		.limit-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) 44px; align-items: center; gap: 8px; font-size: 12px; }
+		.limit-row input[type="range"] { height: 30px; margin: 0; }
+		.limit-row output { text-align: right; }
+		.tempo-actions { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+		.tap-button { flex: 1; height: 58px; border-radius: 4px; border-color: #a7bec130; font: 14px Georgia, serif; display: flex; justify-content: center; gap: 10px; touch-action: manipulation; }
+		.tap-button:active { background: #b5c8ce24; }
+		.tap-count { display: block; margin-top: 10px; font-size: 12px; color: #8d9ea5; }
+		@keyframes unfold { from { opacity: 0; translate: 0 5px; } to { opacity: 1; translate: 0 0; } }
+		.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+		[hidden] { display: none !important; }
+		@media (hover: none) {
+			body.sleeping .controls { opacity: .65; pointer-events: auto; }
+			button:hover .tooltip { opacity: 0; }
+		}
+		@media (prefers-reduced-motion: reduce) { .controls, .tooltip { transition: none; } .control-panel { animation: none; } }
